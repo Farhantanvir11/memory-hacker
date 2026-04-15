@@ -43,10 +43,22 @@ export function useMultiplayer() {
         setIsHost(true);
       };
 
+      // Workaround: Chrome often swallows the WebRTC open event on localhost, so we aggressively poll the raw flag
       if (conn.open) {
         establishConnection();
       } else {
-        conn.on('open', establishConnection);
+        const checkOpen = setInterval(() => {
+          if (conn.open) {
+            clearInterval(checkOpen);
+            establishConnection();
+          }
+        }, 100);
+        
+        // Failsafe: keep standard listener just in case
+        conn.on('open', () => {
+           clearInterval(checkOpen);
+           establishConnection();
+        });
       }
       
       conn.on('data', (data) => {
@@ -97,10 +109,26 @@ export function useMultiplayer() {
       const conn = peerRef.current.connect(targetId);
       connRef.current = conn;
       
-      conn.on('open', () => {
+      const establishClientConnection = () => {
         setConnectionStatus('connected');
         setOpponentId(targetId);
-      });
+      };
+
+      if (conn.open) {
+         establishClientConnection();
+      } else {
+         const checkOpen = setInterval(() => {
+           if (conn.open) {
+             clearInterval(checkOpen);
+             establishClientConnection();
+           }
+         }, 100);
+         
+         conn.on('open', () => {
+            clearInterval(checkOpen);
+            establishClientConnection();
+         });
+      }
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
