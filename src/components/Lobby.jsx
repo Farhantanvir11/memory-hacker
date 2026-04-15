@@ -9,6 +9,7 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     return params.get('join') || '';
   });
   const [lobbyMode, setLobbyMode] = useState('select'); // 'select', 'create', 'join'
+  const [copied, setCopied] = useState(false);
 
   const {
     peerId,
@@ -18,11 +19,7 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     joinRoom
   } = peerLogic;
 
-  React.useEffect(() => {
-    if (lobbyMode === 'create' && connectionStatus !== 'hosting') {
-      hostRoom();
-    }
-  }, [lobbyMode, hostRoom, connectionStatus]);
+  // Cleanup: Remove the dangerous infinite loop React.useEffect here
 
   React.useEffect(() => {
     if (connectionStatus !== 'idle' || !peerId) return;
@@ -64,7 +61,10 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
         
         {lobbyMode === 'select' && (
           <div className="lobby-actions" style={{ flexDirection: 'column' }}>
-            <button className="lobby-btn" onClick={() => setLobbyMode('create')}>CREATE ROOM</button>
+            <button className="lobby-btn" onClick={() => {
+              setLobbyMode('create');
+              hostRoom();
+            }}>CREATE ROOM</button>
             <button className="lobby-btn connect-btn" onClick={() => setLobbyMode('join')}>JOIN ROOM</button>
           </div>
         )}
