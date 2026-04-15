@@ -52,9 +52,17 @@ export function useMultiplayer() {
       });
     });
 
+    peer.on('disconnected', () => {
+      console.log('Peer disconnected from server, attempting to reconnect...');
+      peer.reconnect();
+    });
+
     peer.on('error', (err) => {
       console.error('PeerJS Error:', err);
-      setConnectionStatus('error');
+      // If fatal error, we might want to alert
+      if (err.type === 'peer-unavailable') {
+         setConnectionStatus('error');
+      }
     });
 
     return () => {
@@ -75,7 +83,12 @@ export function useMultiplayer() {
     setIsHost(false);
     
     if (peerRef.current) {
-      const conn = peerRef.current.connect(targetId);
+      // If we got disconnected from server while idling, reconnect first
+      if (peerRef.current.disconnected) {
+        peerRef.current.reconnect();
+      }
+      
+      const conn = peerRef.current.connect(targetId, { reliable: true });
       connRef.current = conn;
       
       conn.on('open', () => {
