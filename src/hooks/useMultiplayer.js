@@ -12,9 +12,9 @@ export function useMultiplayer() {
   const connRef = useRef(null);
   const onDataCallback = useRef(null);
 
-  useEffect(() => {
+  const initializePeer = useCallback(() => {
     if (peerRef.current) return;
-    
+
     const generateShortId = () => {
        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
        let result = '';
@@ -42,21 +42,11 @@ export function useMultiplayer() {
     });
 
     peer.on('connection', (conn) => {
+      // Someone is connecting to us (We are Host)
+      setConnectionStatus('connected');
+      setOpponentId(conn.peer);
+      setIsHost(true);
       connRef.current = conn;
-      
-      const establishHostConnection = () => {
-        setConnectionStatus('connected');
-        setOpponentId(conn.peer);
-        setIsHost(true);
-        // Backup heartbeat sync to ensure Client connects
-        conn.send({ type: 'SYS_ACK' });
-      };
-
-      if (conn.open) {
-         establishHostConnection();
-      } else {
-         conn.on('open', establishHostConnection);
-      }
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
@@ -80,7 +70,10 @@ export function useMultiplayer() {
          setConnectionStatus('error');
       }
     });
+  }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       if (peerRef.current) {
          peerRef.current.destroy();
@@ -90,49 +83,47 @@ export function useMultiplayer() {
   }, []);
 
   const hostRoom = useCallback(() => {
+    initializePeer();
     setConnectionStatus('hosting');
     setIsHost(true);
-  }, []);
+  }, [initializePeer]);
 
   const joinRoom = useCallback((targetId) => {
+    initializePeer();
     setConnectionStatus('connecting');
     setIsHost(false);
     
-    if (peerRef.current) {
-      if (peerRef.current.disconnected) {
-        peerRef.current.reconnect();
-      }
-      
-      const conn = peerRef.current.connect(targetId);
-      connRef.current = conn;
-      
-      conn.on('open', () => {
-        setConnectionStatus('connected');
-        setOpponentId(targetId);
-      });
-      
-      conn.on('data', (data) => {
-        // Intercept explicit host verification
-        if (data && data.type === 'SYS_ACK') {
-           setConnectionStatus('connected');
-           setOpponentId(targetId);
-           return;
-        }
+    // Wait slightly to ensure Peer is constructed in memory before connecting
+    setTimeout(() => {
+        if (peerRef.current) {
+          if (peerRef.current.disconnected) {
+            peerRef.current.reconnect();
+          }
+          
+          const conn = peerRef.current.connect(targetId);
+          connRef.current = conn;
+          
+          conn.on('open', () => {
+            setConnectionStatus('connected');
+            setOpponentId(targetId);
+          });
+          
+          conn.on('data', (data) => {
+            if (onDataCallback.current) {
+               onDataCallback.current(data);
+            }
+          });
+          
+          conn.on('error', () => {
+             setConnectionStatus('error');
+          });
 
-        if (onDataCallback.current) {
-           onDataCallback.current(data);
+          conn.on('close', () => {
+             setConnectionStatus('error');
+          });
         }
-      });
-      
-      conn.on('error', () => {
-         setConnectionStatus('error');
-      });
-
-      conn.on('close', () => {
-         setConnectionStatus('error');
-      });
-    }
-  }, []);
+    }, 100);
+  }, [initializePeer]);
   
   const setOnData = useCallback((callback) => {
     onDataCallback.current = callback;
