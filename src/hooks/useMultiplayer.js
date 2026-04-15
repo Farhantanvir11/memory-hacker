@@ -25,10 +25,12 @@ export function useMultiplayer() {
     };
     
     const peer = new Peer('MH-' + generateShortId(), {
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
           {
             urls: 'turn:openrelay.metered.ca:80',
             username: 'openrelayproject',
@@ -62,6 +64,11 @@ export function useMultiplayer() {
         setIsHost(true);
         // Explicitly force an ACK packet to Client because Client's 'open' event is unreliable over Vercel NATs
         conn.send({ type: 'SYS_ACK' });
+
+        // User Requested: Add retry ping for Link stabilization
+        setInterval(() => {
+          conn.send({ type: 'PING' });
+        }, 2000);
       };
 
       if (conn.open) {
@@ -124,6 +131,13 @@ export function useMultiplayer() {
         setOpponentId(targetId);
         // Backup ping just in case
         conn.send({ type: 'SYS_ACK' });
+
+        // User Requested: Add retry ping to maintain network alive state
+        setInterval(() => {
+          if (conn.open) {
+            conn.send({ type: 'PING' });
+          }
+        }, 2000);
       });
       
       conn.on('data', (data) => {
