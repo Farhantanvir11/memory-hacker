@@ -42,11 +42,19 @@ export function useMultiplayer() {
     });
 
     peer.on('connection', (conn) => {
-      // Someone is connecting to us (We are Host)
-      setConnectionStatus('connected');
-      setOpponentId(conn.peer);
-      setIsHost(true);
       connRef.current = conn;
+      
+      const establishConnection = () => {
+        setConnectionStatus('connected');
+        setOpponentId(conn.peer);
+        setIsHost(true);
+      };
+
+      if (conn.open) {
+        establishConnection();
+      } else {
+        conn.on('open', establishConnection);
+      }
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
