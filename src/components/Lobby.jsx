@@ -38,17 +38,22 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Auto-start the match the split second a connection is locked in
+  React.useEffect(() => {
+    if (connectionStatus === 'connected' && peerLogic.isHost) {
+      setTimeout(() => {
+        onStartGame(true);
+      }, 800); // 800ms delay to explicitly ensure the P2 connection finishes forming
+    }
+  }, [connectionStatus, peerLogic.isHost, onStartGame]);
+
   if (connectionStatus === 'connected') {
     return (
       <div className="lobby-container flex-center">
         <div className="lobby-panel">
-          <h2 className="glow-cyan">LINK ESTABLISHED</h2>
+          <h2 className="glow-cyan glitch-effect">LINK ESTABLISHED</h2>
           <p>Connected to: <span className="highlight-id">{opponentId}</span></p>
-          {peerLogic.isHost ? (
-             <button className="start-btn" onClick={() => onStartGame(true)}>INITIALIZE MATCH</button>
-          ) : (
-             <p className="glow-magenta glitch-effect">WAITING FOR HOST TO INITIALIZE...</p>
-          )}
+          <p className="glow-magenta" style={{ marginTop: '20px' }}>DOWNLOADING GAME STATE...</p>
         </div>
       </div>
     );
