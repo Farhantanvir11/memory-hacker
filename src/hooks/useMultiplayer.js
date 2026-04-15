@@ -24,31 +24,17 @@ export function useMultiplayer() {
        return result;
     };
     
+    // Safely enforce STUN explicitly for Vercel, omitting broken explicit host overrides
     const peer = new Peer('MH-' + generateShortId(), {
-      host: '0.peerjs.com',
-      port: 443,
-      secure: true,
+      pingInterval: 5000,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          }
+          { urls: 'stun:global.stun.twilio.com:3478' }
         ]
       }
     });
+    
     peerRef.current = peer;
     
     peer.on('open', (id) => {
@@ -56,26 +42,11 @@ export function useMultiplayer() {
     });
 
     peer.on('connection', (conn) => {
+      // Someone is connecting to us (We are Host)
+      setConnectionStatus('connected');
+      setOpponentId(conn.peer);
+      setIsHost(true);
       connRef.current = conn;
-      
-      const establishHostConnection = () => {
-        setConnectionStatus('connected');
-        setOpponentId(conn.peer);
-        setIsHost(true);
-        // Explicitly force an ACK packet to Client because Client's 'open' event is unreliable over Vercel NATs
-        conn.send({ type: 'SYS_ACK' });
-
-        // User Requested: Add retry ping for Link stabilization
-        setInterval(() => {
-          conn.send({ type: 'PING' });
-        }, 2000);
-      };
-
-      if (conn.open) {
-         establishHostConnection();
-      } else {
-         conn.on('open', establishHostConnection);
-      }
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
@@ -95,8 +66,7 @@ export function useMultiplayer() {
 
     peer.on('error', (err) => {
       console.error('PeerJS Error:', err);
-      // If fatal error, we might want to alert
-      if (err.type === 'peer-unavailable') {
+      if (err.type === 'peer-unavailable' || err.type === 'network') {
          setConnectionStatus('error');
       }
     });
@@ -129,25 +99,9 @@ export function useMultiplayer() {
       conn.on('open', () => {
         setConnectionStatus('connected');
         setOpponentId(targetId);
-        // Backup ping just in case
-        conn.send({ type: 'SYS_ACK' });
-
-        // User Requested: Add retry ping to maintain network alive state
-        setInterval(() => {
-          if (conn.open) {
-            conn.send({ type: 'PING' });
-          }
-        }, 2000);
       });
       
       conn.on('data', (data) => {
-        // Intercept native handshake
-        if (data && data.type === 'SYS_ACK') {
-           setConnectionStatus('connected');
-           setOpponentId(targetId);
-           return;
-        }
-
         if (onDataCallback.current) {
            onDataCallback.current(data);
         }
