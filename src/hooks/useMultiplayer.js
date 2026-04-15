@@ -12,9 +12,9 @@ export function useMultiplayer() {
   const connRef = useRef(null);
   const onDataCallback = useRef(null);
 
-  const initializePeer = useCallback(() => {
+  useEffect(() => {
     if (peerRef.current) return;
-
+    
     const generateShortId = () => {
        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
        let result = '';
@@ -78,10 +78,7 @@ export function useMultiplayer() {
          setConnectionStatus('error');
       }
     });
-  }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
       if (peerRef.current) {
          peerRef.current.destroy();
@@ -91,47 +88,42 @@ export function useMultiplayer() {
   }, []);
 
   const hostRoom = useCallback(() => {
-    initializePeer();
     setConnectionStatus('hosting');
     setIsHost(true);
-  }, [initializePeer]);
+  }, []);
 
   const joinRoom = useCallback((targetId) => {
-    initializePeer();
     setConnectionStatus('connecting');
     setIsHost(false);
     
-    // Wait slightly to ensure Peer is constructed in memory before connecting
-    setTimeout(() => {
-        if (peerRef.current) {
-          if (peerRef.current.disconnected) {
-            peerRef.current.reconnect();
-          }
-          
-          const conn = peerRef.current.connect(targetId);
-          connRef.current = conn;
-          
-          conn.on('open', () => {
-            setConnectionStatus('connected');
-            setOpponentId(targetId);
-          });
-          
-          conn.on('data', (data) => {
-            if (onDataCallback.current) {
-               onDataCallback.current(data);
-            }
-          });
-          
-          conn.on('error', () => {
-             setConnectionStatus('error');
-          });
-
-          conn.on('close', () => {
-             setConnectionStatus('error');
-          });
+    if (peerRef.current) {
+      if (peerRef.current.disconnected) {
+        peerRef.current.reconnect();
+      }
+      
+      const conn = peerRef.current.connect(targetId);
+      connRef.current = conn;
+      
+      conn.on('open', () => {
+        setConnectionStatus('connected');
+        setOpponentId(targetId);
+      });
+      
+      conn.on('data', (data) => {
+        if (onDataCallback.current) {
+           onDataCallback.current(data);
         }
-    }, 100);
-  }, [initializePeer]);
+      });
+      
+      conn.on('error', () => {
+         setConnectionStatus('error');
+      });
+
+      conn.on('close', () => {
+         setConnectionStatus('error');
+      });
+    }
+  }, []);
   
   const setOnData = useCallback((callback) => {
     onDataCallback.current = callback;
