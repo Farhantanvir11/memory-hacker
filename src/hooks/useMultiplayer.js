@@ -24,7 +24,29 @@ export function useMultiplayer() {
        return result;
     };
     
-    const peer = new Peer('MH-' + generateShortId());
+    const peer = new Peer('MH-' + generateShortId(), {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ]
+      }
+    });
     peerRef.current = peer;
     
     peer.on('open', (id) => {
@@ -33,13 +55,10 @@ export function useMultiplayer() {
 
     peer.on('connection', (conn) => {
       // Someone is connecting to us (We are Host)
+      setConnectionStatus('connected');
+      setOpponentId(conn.peer);
+      setIsHost(true);
       connRef.current = conn;
-      
-      conn.on('open', () => {
-        setConnectionStatus('connected');
-        setOpponentId(conn.peer);
-        setIsHost(true);
-      });
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
@@ -88,7 +107,7 @@ export function useMultiplayer() {
         peerRef.current.reconnect();
       }
       
-      const conn = peerRef.current.connect(targetId, { reliable: true });
+      const conn = peerRef.current.connect(targetId);
       connRef.current = conn;
       
       conn.on('open', () => {
