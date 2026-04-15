@@ -54,11 +54,21 @@ export function useMultiplayer() {
     });
 
     peer.on('connection', (conn) => {
-      // Someone is connecting to us (We are Host)
-      setConnectionStatus('connected');
-      setOpponentId(conn.peer);
-      setIsHost(true);
       connRef.current = conn;
+      
+      const establishHostConnection = () => {
+        setConnectionStatus('connected');
+        setOpponentId(conn.peer);
+        setIsHost(true);
+        // Explicitly force an ACK packet to Client because Client's 'open' event is unreliable over Vercel NATs
+        conn.send({ type: 'SYS_ACK' });
+      };
+
+      if (conn.open) {
+         establishHostConnection();
+      } else {
+         conn.on('open', establishHostConnection);
+      }
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
@@ -102,7 +112,6 @@ export function useMultiplayer() {
     setIsHost(false);
     
     if (peerRef.current) {
-      // If we got disconnected from server while idling, reconnect first
       if (peerRef.current.disconnected) {
         peerRef.current.reconnect();
       }
@@ -113,9 +122,18 @@ export function useMultiplayer() {
       conn.on('open', () => {
         setConnectionStatus('connected');
         setOpponentId(targetId);
+        // Backup ping just in case
+        conn.send({ type: 'SYS_ACK' });
       });
       
       conn.on('data', (data) => {
+        // Intercept native handshake
+        if (data && data.type === 'SYS_ACK') {
+           setConnectionStatus('connected');
+           setOpponentId(targetId);
+           return;
+        }
+
         if (onDataCallback.current) {
            onDataCallback.current(data);
         }
