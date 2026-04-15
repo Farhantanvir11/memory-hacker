@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg-color: #0a192f;
+  --card-bg: #112240;
+  --card-matched: #233554;
+  
+  --neon-green: #64ffda;
+  --neon-cyan: #8892b0;
+  --neon-magenta: #b392f0;
+  --neon-red: #ff7b72;
+  --neon-yellow: #e5c07b;
+  
+  --text-primary: #e0e0e0;
+  
+  --font-hacker: 'Share Tech Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: var(--font-hacker);
+  overflow-x: hidden;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(0, 255, 65, 0.05) 0%, transparent 60%),
+    linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+  background-size: 100vw 100vh, 30px 30px, 30px 30px;
+  background-position: center center;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Typography styles */
+h1, h2, h3 {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* Animations */
+@keyframes glitch {
+  0% { transform: translate(0) }
+  20% { transform: translate(-2px, 2px) }
+  40% { transform: translate(-2px, -2px) }
+  60% { transform: translate(2px, 2px) }
+  80% { transform: translate(2px, -2px) }
+  100% { transform: translate(0) }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.scanline-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(to bottom, transparent, rgba(0, 255, 65, 0.1), transparent);
+  animation: scanline 6s linear infinite;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Glitch classes */
+.glitch-effect {
+  animation: glitch 0.2s linear infinite;
+  color: var(--neon-magenta);
+  text-shadow: 2px 0 var(--neon-cyan), -2px 0 var(--neon-green);
+}
+
+.blur-effect {
+  filter: blur(5px) grayscale(50%);
+  transition: filter 0.3s ease;
+}
+
+/* Utility */
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.glow-green { text-shadow: 0 0 10px var(--neon-green); }
+.glow-cyan { text-shadow: 0 0 10px var(--neon-cyan); }
+.glow-magenta { text-shadow: 0 0 10px var(--neon-magenta); }
