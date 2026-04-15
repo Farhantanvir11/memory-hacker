@@ -24,15 +24,7 @@ export function useMultiplayer() {
        return result;
     };
     
-    const peer = new Peer('MH-' + generateShortId(), {
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-        ]
-      }
-    });
+    const peer = new Peer('MH-' + generateShortId());
     peerRef.current = peer;
     
     peer.on('open', (id) => {
@@ -40,14 +32,20 @@ export function useMultiplayer() {
     });
 
     peer.on('connection', (conn) => {
-      // Someone is attempting to connect; Wait for open!
+      // Someone is connecting to us (We are Host)
       connRef.current = conn;
       
-      conn.on('open', () => {
+      const establishHostConnection = () => {
         setConnectionStatus('connected');
         setOpponentId(conn.peer);
         setIsHost(true);
-      });
+      };
+
+      if (conn.open) {
+         establishHostConnection();
+      } else {
+         conn.on('open', establishHostConnection);
+      }
       
       conn.on('data', (data) => {
         if (onDataCallback.current) {
