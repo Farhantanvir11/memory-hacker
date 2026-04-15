@@ -18,12 +18,12 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     joinRoom
   } = peerLogic;
 
-  // Auto-connect if URL parameter exists
+  // Auto-connect if URL parameter exists, but only AFTER our own Peer is ready!
   React.useEffect(() => {
-    if (joinId && connectionStatus === 'idle') {
+    if (joinId && connectionStatus === 'idle' && peerId) {
        joinRoom(joinId);
     }
-  }, [joinId, connectionStatus, joinRoom]);
+  }, [joinId, connectionStatus, joinRoom, peerId]);
 
   const copyToClipboard = () => {
     if (!peerId) return;
