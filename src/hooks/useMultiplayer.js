@@ -24,15 +24,8 @@ export function useMultiplayer() {
        return result;
     };
     
-    // Safely enforce STUN explicitly for Vercel, omitting broken explicit host overrides
     const peer = new Peer('MH-' + generateShortId(), {
-      pingInterval: 5000,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
-      }
+      pingInterval: 5000
     });
     
     peerRef.current = peer;
