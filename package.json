@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "vite",
+    "start": "node server.js",
     "dev": "vite",
     "server": "node server.js",
     "test:multiplayer": "node scripts/multiplayer-smoke-test.js",
