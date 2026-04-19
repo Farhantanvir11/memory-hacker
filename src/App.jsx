@@ -3,7 +3,9 @@ import Board from './components/Board';
 import PlayerDashboard from './components/PlayerDashboard';
 import Lobby from './components/Lobby';
 import { useGameEngine } from './hooks/useGameEngine';
+import { useGameAudio } from './hooks/useGameAudio';
 import { useMultiplayer } from './hooks/useMultiplayer';
+import { isPeekVisibleToLocalPlayer } from './game/powers';
 import './index.css';
 
 function App() {
@@ -13,12 +15,14 @@ function App() {
   });
   
   const peerLogic = useMultiplayer();
+  const audioControls = useGameAudio();
   
   // Base gameEngine mode on internal logic
   let engineMode = 'ai';
   if (gameMode === '1v1' || gameMode === '1v1_host' || gameMode === '1v1_client') {
      engineMode = peerLogic.isHost ? '1v1_host' : '1v1_client';
   }
+  const localPlayerIndex = engineMode === '1v1_client' ? 1 : 0;
 
   const {
     cards,
@@ -31,7 +35,7 @@ function App() {
     startGame,
     handleCardClick,
     executePower
-  } = useGameEngine(engineMode, peerLogic);
+  } = useGameEngine(engineMode, peerLogic, audioControls);
 
   const startSoloGame = () => {
     setGameMode('ai');
@@ -88,17 +92,15 @@ function App() {
               <Board 
                 cards={cards.map(c => ({
                   ...c,
-                  isFlipped: c.isFlipped || c.peekedBy === (engineMode === '1v1_client' ? 1 : 0)
+                  isFlipped: isPeekVisibleToLocalPlayer(c, localPlayerIndex)
                 }))}
                 onCardClick={handleCardClick}
-                isFogMode={activeFogger !== null && activeFogger !== (engineMode === '1v1_client' ? 1 : 0)}
+                isFogMode={activeFogger !== null && activeFogger !== localPlayerIndex}
                 isGameStarted={isGameStarted}
                 winner={winner}
                 onRestart={() => {
-                   if (gameMode === 'ai' || (gameMode === '1v1' && peerLogic.isHost)) {
-                       startGame();
-                   } else {
-                       // Client waits for host
+                   if (gameMode === 'ai' || gameMode === '1v1') {
+                     startGame();
                    }
                 }}
               />

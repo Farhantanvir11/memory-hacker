@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Terminal, Shield, Cpu, Code, Database, Bug, Wifi, Lock, Unlock, Server } from 'lucide-react';
+import {
+  applyPeekPower,
+  applyShufflePower,
+  applySwapPower,
+  clearGlitching,
+  clearPeekPower,
+  getBlockedPlayerIndex,
+  getNextPlayerIndex
+} from '../game/powers';
 
 const ICONS = [Terminal, Shield, Cpu, Code, Database, Bug, Wifi, Lock, Unlock, Server];
 
@@ -16,7 +25,7 @@ const generateDeck = () => {
   return deck.sort(() => Math.random() - 0.5);
 };
 
-export function useGameEngine(gameMode, peerLogic) {
+export function useGameEngine(gameMode, peerLogic, audioControls = {}) {
   const [cards, setCards] = useState([]);
 
   // Define players dynamically based on mode
@@ -32,10 +41,12 @@ export function useGameEngine(gameMode, peerLogic) {
 
   const [activeHack, setActiveHack] = useState(null);
   const [activeFogger, setActiveFogger] = useState(null);
+  const [blockedPlayerIndex, setBlockedPlayerIndex] = useState(null);
 
   const [isLocked, setIsLocked] = useState(false);
 
   const { sendData, setOnData, isHost } = peerLogic || {};
+  const { playCardClick, playPointGain } = audioControls;
 
   // For debugging and internal state diffing
   const stateRef = useRef(null);
@@ -72,6 +83,7 @@ export function useGameEngine(gameMode, peerLogic) {
               currentPlayerIndex: newStateOverrides.currentPlayerIndex !== undefined ? newStateOverrides.currentPlayerIndex : stateRef.current.currentPlayerIndex,
               activeHack: newStateOverrides.activeHack !== undefined ? newStateOverrides.activeHack : stateRef.current.activeHack,
               activeFogger: newStateOverrides.activeFogger !== undefined ? newStateOverrides.activeFogger : stateRef.current.activeFogger,
+              blockedPlayerIndex: newStateOverrides.blockedPlayerIndex !== undefined ? newStateOverrides.blockedPlayerIndex : stateRef.current.blockedPlayerIndex,
               winner: newStateOverrides.winner !== undefined ? newStateOverrides.winner : stateRef.current.winner,
               isGameStarted: newStateOverrides.isGameStarted !== undefined ? newStateOverrides.isGameStarted : stateRef.current.isGameStarted
             }
@@ -85,8 +97,8 @@ export function useGameEngine(gameMode, peerLogic) {
 
   // Keep a ref to latest state for syncing
   useEffect(() => {
-    stateRef.current = { cards, players, currentPlayerIndex, activeHack, activeFogger, isGameStarted, winner, flippedCards };
-  }, [cards, players, currentPlayerIndex, activeHack, activeFogger, isGameStarted, winner, flippedCards]);
+    stateRef.current = { cards, players, currentPlayerIndex, activeHack, activeFogger, blockedPlayerIndex, isGameStarted, winner, flippedCards };
+  }, [cards, players, currentPlayerIndex, activeHack, activeFogger, blockedPlayerIndex, isGameStarted, winner, flippedCards]);
 
   // Handle incoming PeerJS messages
   useEffect(() => {
@@ -99,6 +111,7 @@ export function useGameEngine(gameMode, peerLogic) {
           setCurrentPlayerIndex(p.currentPlayerIndex);
           setActiveHack(p.activeHack);
           setActiveFogger(p.activeFogger);
+          setBlockedPlayerIndex(p.blockedPlayerIndex ?? null);
           setWinner(p.winner);
           setIsGameStarted(p.isGameStarted);
         }
@@ -136,12 +149,17 @@ export function useGameEngine(gameMode, peerLogic) {
     setWinner(null);
     setActiveHack(null);
     setActiveFogger(null);
+    setBlockedPlayerIndex(null);
     setIsLocked(false);
     setIsGameStarted(true);
 
-    if (isHost) syncStateToClient({ cards: initialDeck, isGameStarted: true, currentPlayerIndex: 0 });
+    if (isHost) {
+      syncStateToClient({ cards: initialDeck, isGameStarted: true, currentPlayerIndex: 0, blockedPlayerIndex: null });
+    }
   }, [gameMode, isHost, syncStateToClient, sendData]);
-  startGameRef.current = startGame;
+  useEffect(() => {
+    startGameRef.current = startGame;
+  }, [startGame]);
 
   const handleCardClick = (clickedCard, fromNetwork = false) => {
     const currentState = stateRef.current;
@@ -174,6 +192,7 @@ export function useGameEngine(gameMode, peerLogic) {
 
     setCards(updatedCards);
     setFlippedCards(newFlippedCards);
+    playCardClick?.();
 
     syncStateToClient({ cards: updatedCards });
 
@@ -195,6 +214,7 @@ export function useGameEngine(gameMode, peerLogic) {
             const newPlayers = [...prev];
             newPlayers[stateRef.current.currentPlayerIndex].score += 10;
             stateRef.current.players = newPlayers;
+            playPointGain?.();
             syncStateToClient({ players: newPlayers });
             return newPlayers;
           });
@@ -208,13 +228,13 @@ export function useGameEngine(gameMode, peerLogic) {
           setCards(prev => {
             const nc = prev.map(c => (c.id === firstCard.id || c.id === secondCard.id) ? { ...c, isFlipped: false } : c);
             stateRef.current.cards = nc;
-            syncStateToClient({ cards: nc, currentPlayerIndex: stateRef.current.currentPlayerIndex === 0 ? 1 : 0 });
+            syncStateToClient({ cards: nc, currentPlayerIndex: getNextPlayerIndex(stateRef.current.currentPlayerIndex) });
             return nc;
           });
           stateRef.current.flippedCards = [];
           setFlippedCards([]);
           setCurrentPlayerIndex(prev => {
-            const nI = prev === 0 ? 1 : 0;
+            const nI = getNextPlayerIndex(prev);
             stateRef.current.currentPlayerIndex = nI;
             return nI;
           });
@@ -223,7 +243,9 @@ export function useGameEngine(gameMode, peerLogic) {
       }
     }
   };
-  handleCardClickRef.current = handleCardClick;
+  useEffect(() => {
+    handleCardClickRef.current = handleCardClick;
+  }, [handleCardClick]);
 
   useEffect(() => {
     const totalScore = players.reduce((sum, p) => sum + p.score, 0);
@@ -232,10 +254,45 @@ export function useGameEngine(gameMode, peerLogic) {
       if (players[0].score > players[1].score) winStr = players[0].name;
       else if (players[1].score > players[0].score) winStr = players[1].name;
 
-      setWinner(winStr);
-      syncStateToClient({ winner: winStr });
+      const timer = setTimeout(() => {
+        setWinner(winStr);
+        syncStateToClient({ winner: winStr });
+      }, 0);
+
+      return () => clearTimeout(timer);
     }
   }, [players, isGameStarted, syncStateToClient]);
+
+  useEffect(() => {
+    if (!isGameStarted || blockedPlayerIndex === null || currentPlayerIndex !== blockedPlayerIndex || winner) {
+      return;
+    }
+
+    const startTimer = setTimeout(() => {
+      setIsLocked(true);
+      setActiveHack('block');
+    }, 0);
+
+    const timer = setTimeout(() => {
+      const nextPlayerIndex = getNextPlayerIndex(blockedPlayerIndex);
+      stateRef.current.blockedPlayerIndex = null;
+      stateRef.current.currentPlayerIndex = nextPlayerIndex;
+      setBlockedPlayerIndex(null);
+      setCurrentPlayerIndex(nextPlayerIndex);
+      setActiveHack(null);
+      setIsLocked(false);
+      syncStateToClient({
+        blockedPlayerIndex: null,
+        currentPlayerIndex: nextPlayerIndex,
+        activeHack: null
+      });
+    }, 1000);
+
+    return () => {
+      clearTimeout(startTimer);
+      clearTimeout(timer);
+    };
+  }, [blockedPlayerIndex, currentPlayerIndex, isGameStarted, winner, syncStateToClient]);
 
   const executePower = (playerId, powerName, fromNetwork = false) => {
     const currentState = stateRef.current;
@@ -266,24 +323,15 @@ export function useGameEngine(gameMode, peerLogic) {
 
     if (powerName === 'shuffle') {
       setTimeout(() => {
-        const unmatched = [...stateRef.current.cards].filter(c => !c.isMatched && !c.isFlipped);
-        const shuffled = [...unmatched].sort(() => Math.random() - 0.5);
-
-        let shuffleIdx = 0;
-        const newDeck = stateRef.current.cards.map(c => {
-          if (!c.isMatched && !c.isFlipped) {
-            const sc = shuffled[shuffleIdx];
-            shuffleIdx++;
-            return { ...sc, isGlitching: true };
-          }
-          return c;
-        });
+        const newDeck = applyShufflePower(stateRef.current.cards);
         setCards(newDeck);
+        stateRef.current.cards = newDeck;
         syncStateToClient({ cards: newDeck });
 
         setTimeout(() => {
-          setCards(prev => {
-            const nc = prev.map(c => ({ ...c, isGlitching: false }));
+          setCards((prev) => {
+            const nc = clearGlitching(prev);
+            stateRef.current.cards = nc;
             syncStateToClient({ cards: nc, activeHack: null });
             return nc;
           });
@@ -293,20 +341,21 @@ export function useGameEngine(gameMode, peerLogic) {
       }, 100);
     }
     else if (powerName === 'peek') {
-      const unmatched = stateRef.current.cards.filter(c => !c.isMatched && !c.isFlipped);
-      const peekCards = [...unmatched].sort(() => Math.random() - 0.5).slice(0, 3);
+      const peekerIndex = stateRef.current.currentPlayerIndex;
+      const nextCards = applyPeekPower(stateRef.current.cards, peekerIndex);
+      const peekedCardIds = nextCards.filter((card) => card.peekedBy === peekerIndex).map((card) => card.id);
 
-      const peekerIndex = (isHost && !fromNetwork) ? 0 : 1;
-
-      setCards(prev => {
-        const nc = prev.map(c => peekCards.find(pc => pc.id === c.id) ? { ...c, peekedBy: peekerIndex, isGlitching: true } : c);
+      setCards(() => {
+        const nc = nextCards;
+        stateRef.current.cards = nc;
         syncStateToClient({ cards: nc });
         return nc;
       });
 
       setTimeout(() => {
-        setCards(prev => {
-          const nc = prev.map(c => peekCards.find(pc => pc.id === c.id) ? { ...c, peekedBy: null, isGlitching: false } : c);
+        setCards((prev) => {
+          const nc = clearPeekPower(prev, peekedCardIds);
+          stateRef.current.cards = nc;
           syncStateToClient({ cards: nc, activeHack: null });
           return nc;
         });
@@ -316,28 +365,27 @@ export function useGameEngine(gameMode, peerLogic) {
     }
     else if (powerName === 'block') {
       setTimeout(() => {
+        const nextBlockedPlayerIndex = getBlockedPlayerIndex(stateRef.current.currentPlayerIndex);
+        stateRef.current.blockedPlayerIndex = nextBlockedPlayerIndex;
+        setBlockedPlayerIndex(nextBlockedPlayerIndex);
         setActiveHack(null);
         setIsLocked(false);
-        syncStateToClient({ activeHack: null });
+        syncStateToClient({ activeHack: null, blockedPlayerIndex: nextBlockedPlayerIndex });
       }, 1000);
     }
     else if (powerName === 'swap') {
-      const unmatched = stateRef.current.cards.filter(c => !c.isMatched && !c.isFlipped);
-      if (unmatched.length >= 2) {
-        const c1 = unmatched[0];
-        const c2 = unmatched[1];
-        setCards(prev => {
-          const nc = prev.map(c => {
-            if (c.id === c1.id) return { ...c, iconIndex: c2.iconIndex, icon: c2.icon, isGlitching: true };
-            if (c.id === c2.id) return { ...c, iconIndex: c1.iconIndex, icon: c1.icon, isGlitching: true };
-            return c;
-          });
+      const nextCards = applySwapPower(stateRef.current.cards);
+      if (nextCards !== stateRef.current.cards) {
+        setCards(() => {
+          const nc = nextCards;
+          stateRef.current.cards = nc;
           syncStateToClient({ cards: nc });
           return nc;
         });
         setTimeout(() => {
-          setCards(prev => {
-            const nc = prev.map(c => ({ ...c, isGlitching: false }));
+          setCards((prev) => {
+            const nc = clearGlitching(prev);
+            stateRef.current.cards = nc;
             syncStateToClient({ cards: nc, activeHack: null });
             return nc;
           });
@@ -362,7 +410,9 @@ export function useGameEngine(gameMode, peerLogic) {
       }, 5000);
     }
   };
-  executePowerRef.current = executePower;
+  useEffect(() => {
+    executePowerRef.current = executePower;
+  }, [executePower]);
 
   // AI Logic remain unchanged, but restricted to AI mode
   useEffect(() => {

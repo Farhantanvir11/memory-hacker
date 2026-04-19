@@ -8,6 +8,7 @@
     "dev": "vite",
     "server": "node server.js",
     "test:multiplayer": "node scripts/multiplayer-smoke-test.js",
+    "test:powers": "node scripts/power-regression-test.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
