@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Peer } from 'peerjs';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
 
 export function useMultiplayer() {
   const [peerId, setPeerId] = useState('');
@@ -9,156 +11,129 @@ export function useMultiplayer() {
   const [isHost, setIsHost] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const peerRef = useRef(null);
-  const connRef = useRef(null);
+  const socketRef = useRef(null);
+  const roomCodeRef = useRef('');
   const onDataCallback = useRef(null);
-  const destroyedRef = useRef(false);
-
-  const generateShortId = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < 4; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
-  const attachConnectionHandlers = useCallback((conn, nextIsHost, nextOpponentId) => {
-    connRef.current = conn;
-    setErrorMessage('');
-
-    let openCheck = null;
-
-    const establishConnection = () => {
-      if (openCheck) clearInterval(openCheck);
-      setConnectionStatus('connected');
-      setOpponentId(nextOpponentId || conn.peer);
-      setIsHost(nextIsHost);
-    };
-
-    if (conn.open) {
-      establishConnection();
-    } else {
-      openCheck = setInterval(() => {
-        if (conn.open) establishConnection();
-      }, 100);
-    }
-
-    conn.on('open', establishConnection);
-
-    conn.on('data', (data) => {
-      if (onDataCallback.current) {
-        onDataCallback.current(data);
-      }
-    });
-
-    conn.on('error', (err) => {
-      if (openCheck) clearInterval(openCheck);
-      console.error('Connection error:', err);
-      setErrorMessage(err?.message || 'Connection failed.');
-      setConnectionStatus('error');
-    });
-
-    conn.on('close', () => {
-      if (openCheck) clearInterval(openCheck);
-      if (!destroyedRef.current) {
-        setErrorMessage('Connection closed.');
-        setConnectionStatus('error');
-      }
-    });
-
-    return () => {
-      if (openCheck) clearInterval(openCheck);
-    };
-  }, []);
 
   useEffect(() => {
-    if (peerRef.current) return;
-    destroyedRef.current = false;
-
-    const peer = new Peer('MH-' + generateShortId(), {
-      host: '0.peerjs.com',
-      port: 443,
-      secure: true,
-      pingInterval: 5000,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' }
-        ]
-      }
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      timeout: 10000
     });
 
-    peerRef.current = peer;
+    socketRef.current = socket;
 
-    peer.on('open', (id) => {
-      setPeerId(id);
+    socket.on('socket-ready', ({ socketId }) => {
+      if (!roomCodeRef.current) {
+        setPeerId(socketId);
+      }
       setErrorMessage('');
     });
 
-    peer.on('connection', (conn) => {
-      attachConnectionHandlers(conn, true, conn.peer);
-    });
-
-    peer.on('disconnected', () => {
-      if (!destroyedRef.current && !peer.destroyed) {
-        peer.reconnect();
-      }
-    });
-
-    peer.on('error', (err) => {
-      console.error('PeerJS Error:', err);
-      setErrorMessage(err?.message || 'Peer connection failed.');
+    socket.on('connect_error', (err) => {
       setConnectionStatus('error');
+      setErrorMessage(`Could not reach multiplayer server: ${err.message}`);
+    });
+
+    socket.on('room-ready', ({ roomCode, hostId, guestId }) => {
+      roomCodeRef.current = roomCode;
+      setConnectionStatus('connected');
+      setErrorMessage('');
+      setOpponentId(socket.id === hostId ? guestId : hostId);
+      setIsHost(socket.id === hostId);
+    });
+
+    socket.on('game-message', (data) => {
+      onDataCallback.current?.(data);
+    });
+
+    socket.on('peer-disconnected', () => {
+      setConnectionStatus('error');
+      setErrorMessage('Opponent disconnected. Create a new room to play again.');
+      setOpponentId('');
+    });
+
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io client disconnect') return;
+      setConnectionStatus('error');
+      setErrorMessage('Lost connection to the multiplayer server.');
     });
 
     return () => {
-      destroyedRef.current = true;
-      connRef.current?.close();
-      peer.destroy();
-      peerRef.current = null;
+      socket.disconnect();
+      socketRef.current = null;
     };
-  }, [attachConnectionHandlers]);
+  }, []);
 
   const hostRoom = useCallback(() => {
+    const socket = socketRef.current;
+
+    if (!socket?.connected) {
+      setConnectionStatus('error');
+      setErrorMessage('Multiplayer server is not connected yet. Try again in a moment.');
+      return;
+    }
+
     setConnectionStatus('hosting');
     setIsHost(true);
+    setOpponentId('');
     setErrorMessage('');
+
+    socket.emit('create-room', (response) => {
+      if (!response?.ok) {
+        setConnectionStatus('error');
+        setErrorMessage(response?.message || 'Could not create room.');
+        return;
+      }
+
+      roomCodeRef.current = response.roomCode;
+      setPeerId(response.roomCode);
+    });
   }, []);
 
   const joinRoom = useCallback((targetId) => {
+    const socket = socketRef.current;
     const cleanTargetId = targetId?.trim().toUpperCase();
 
     if (!cleanTargetId) {
+      setConnectionStatus('error');
       setErrorMessage('Invalid room ID.');
       return;
     }
 
-    if (!peerRef.current || !peerRef.current.id) {
-      setErrorMessage('Network peer is still starting. Try again in a moment.');
+    if (!socket?.connected) {
+      setConnectionStatus('error');
+      setErrorMessage('Multiplayer server is not connected yet. Try again in a moment.');
       return;
     }
 
-    connRef.current?.close();
-
     setConnectionStatus('connecting');
     setIsHost(false);
+    setOpponentId('');
     setErrorMessage('');
 
-    const conn = peerRef.current.connect(cleanTargetId, {
-      reliable: true,
-      serialization: 'json'
-    });
+    socket.emit('join-room', cleanTargetId, (response) => {
+      if (!response?.ok) {
+        setConnectionStatus('error');
+        setErrorMessage(response?.message || 'Could not join room.');
+        return;
+      }
 
-    attachConnectionHandlers(conn, false, cleanTargetId);
-  }, [attachConnectionHandlers]);
+      roomCodeRef.current = response.roomCode;
+      setPeerId(response.roomCode);
+      setOpponentId(response.hostId || '');
+    });
+  }, []);
 
   const setOnData = useCallback((callback) => {
     onDataCallback.current = callback;
   }, []);
 
   const sendData = useCallback((data) => {
-    if (connRef.current && connectionStatus === 'connected') {
-      connRef.current.send(data);
+    const socket = socketRef.current;
+    if (socket?.connected && connectionStatus === 'connected') {
+      socket.emit('game-message', data);
     }
   }, [connectionStatus]);
 
