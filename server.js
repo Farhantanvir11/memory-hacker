@@ -5,7 +5,9 @@ const PORT = process.env.PORT || 3001;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
 
 const httpServer = createServer((req, res) => {
-  if (req.url === '/health') {
+  const pathname = new URL(req.url, 'http://localhost').pathname.replace(/\/$/, '') || '/';
+
+  if (pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
     return;
