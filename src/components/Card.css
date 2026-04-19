@@ -1,17 +1,8 @@
 .card-container {
-  width: 80px;
-  height: 110px;
+  width: min(100%, 112px);
+  aspect-ratio: 10 / 14;
   perspective: 1000px;
   cursor: pointer;
-  margin: 5px;
-}
-
-@media (min-width: 600px) {
-  .card-container {
-    width: 100px;
-    height: 140px;
-    margin: 8px;
-  }
 }
 
 .card-inner {
@@ -59,7 +50,7 @@
   color: var(--neon-green);
   opacity: 0.5;
   font-family: var(--font-hacker);
-  font-size: 1.5rem;
+  font-size: clamp(1rem, 3vw, 1.5rem);
 }
 
 .card-back:hover {
@@ -84,6 +75,8 @@
 .card-icon {
   color: var(--text-primary);
   filter: drop-shadow(0 0 5px var(--neon-cyan));
+  width: clamp(24px, 5vw, 40px);
+  height: clamp(24px, 5vw, 40px);
 }
 
 .card-container.matched .card-icon {

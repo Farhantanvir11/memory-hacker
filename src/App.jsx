@@ -49,26 +49,19 @@ function App() {
   return (
     <>
       <div className="scanline-overlay"></div>
-      <div className="game-container" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div className="game-shell">
         
-        <header style={{ padding: '20px', textAlign: 'center', borderBottom: '1px solid var(--neon-cyan)' }}>
-          <h1 className="glitch-effect" style={{ 
-              margin: 0, 
-              color: '#ffffff', 
-              textShadow: '0 0 5px var(--neon-cyan), 0 0 15px var(--neon-cyan), 0 0 30px var(--neon-green), 0 0 45px var(--neon-green)',
-              fontSize: '3.5rem',
-              letterSpacing: '6px',
-              fontWeight: '900'
-          }}>
+        <header className="game-header">
+          <h1 className="glitch-effect game-title">
              MEMORY_HACKER.EXE
           </h1>
-          <p style={{ margin: '5px 0 0 0', opacity: 0.7 }}>Sabotage your opponent. Hack their memory.</p>
+          <p className="game-subtitle">Sabotage your opponent. Hack their memory.</p>
         </header>
 
         {gameMode === 'menu' && (
-           <div className="flex-center" style={{ flex: 1, flexDirection: 'column', gap: '20px' }}>
-             <button className="start-btn" onClick={startSoloGame} style={{ width: '250px' }}>SOLO SYSTEM (vs AI)</button>
-             <button className="start-btn" onClick={startMultiplayer} style={{ width: '250px', borderColor: 'var(--neon-magenta)', color: 'var(--neon-magenta)' }}>MULTIPLAYER (1v1)</button>
+           <div className="menu-screen flex-center">
+             <button className="start-btn menu-btn" onClick={startSoloGame}>SOLO SYSTEM (vs AI)</button>
+             <button className="start-btn menu-btn menu-btn-alt" onClick={startMultiplayer}>MULTIPLAYER (1v1)</button>
            </div>
         )}
 
@@ -88,7 +81,7 @@ function App() {
               onUsePower={executePower}
               activeHack={activeHack}
             />
-            <main style={{ flex: 1, display: 'flex', position: 'relative' }}>
+            <main className="game-main">
               <Board 
                 cards={cards.map(c => ({
                   ...c,

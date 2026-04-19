@@ -1,7 +1,8 @@
 .dashboard {
   display: flex;
   justify-content: space-between;
-  padding: 15px 30px;
+  gap: 12px;
+  padding: 12px clamp(12px, 3vw, 30px);
   background: rgba(17, 17, 24, 0.8);
   border-bottom: 2px solid var(--neon-cyan);
   box-shadow: 0 4px 10px rgba(0, 240, 255, 0.2);
@@ -10,7 +11,8 @@
 .player-info {
   display: flex;
   flex-direction: column;
-  width: 45%;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .player-info.active {
@@ -21,8 +23,9 @@
 }
 
 .player-name {
-  font-size: 1.2rem;
+  font-size: clamp(0.85rem, 2.4vw, 1.2rem);
   margin-bottom: 5px;
+  overflow-wrap: anywhere;
 }
 
 .player-info.active .player-name {
@@ -31,13 +34,14 @@
 }
 
 .player-score {
-  font-size: 2rem;
+  font-size: clamp(1.35rem, 4vw, 2rem);
   font-weight: bold;
 }
 
 .powers-container {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 10px;
 }
 
@@ -70,7 +74,14 @@
 .active-hack-alert {
   text-align: center;
   color: var(--neon-magenta);
-  font-size: 1.5rem;
+  font-size: clamp(0.95rem, 2.7vw, 1.5rem);
   margin-top: 10px;
-  height: 30px;
+  min-height: 30px;
+  padding: 0 12px 8px;
+}
+
+@media (max-width: 640px) {
+  .dashboard {
+    flex-direction: column;
+  }
 }

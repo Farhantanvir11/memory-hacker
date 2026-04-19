@@ -7,7 +7,7 @@
 .lobby-panel {
   background: rgba(17, 34, 64, 0.8);
   border: 1px solid var(--neon-cyan);
-  padding: 30px;
+  padding: clamp(18px, 4vw, 30px);
   border-radius: 8px;
   text-align: center;
   max-width: 600px;
@@ -23,6 +23,7 @@
   background: rgba(0,0,0,0.3);
   padding: 5px 10px;
   border-radius: 3px;
+  overflow-wrap: anywhere;
 }
 
 .lobby-actions {
