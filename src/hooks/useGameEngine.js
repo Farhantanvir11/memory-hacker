@@ -39,6 +39,9 @@ export function useGameEngine(gameMode, peerLogic) {
 
   // For debugging and internal state diffing
   const stateRef = useRef(null);
+  const startGameRef = useRef(null);
+  const handleCardClickRef = useRef(null);
+  const executePowerRef = useRef(null);
 
   // Re-attach icons after serialization (icons are React components, can't be sent over network)
   const restoreIcons = (deck) => {
@@ -49,7 +52,8 @@ export function useGameEngine(gameMode, peerLogic) {
   const stripIcons = (deck) => {
     if (!deck) return [];
     return deck.map(c => {
-      const { icon, ...rest } = c;
+      const rest = { ...c };
+      delete rest.icon;
       return rest;
     });
   };
@@ -99,14 +103,14 @@ export function useGameEngine(gameMode, peerLogic) {
           setIsGameStarted(p.isGameStarted);
         }
         else if (data.type === 'INTENT_START' && isHost) {
-          startGame(true);
+          startGameRef.current?.(true);
         }
         else if (data.type === 'INTENT_CLICK' && isHost) {
           const targetCard = stateRef.current.cards.find(c => c.id === data.payload.cardId);
-          if (targetCard) handleCardClick(targetCard, true);
+          if (targetCard) handleCardClickRef.current?.(targetCard, true);
         }
         else if (data.type === 'INTENT_POWER' && isHost) {
-          executePower(data.payload.playerId, data.payload.powerName, true);
+          executePowerRef.current?.(data.payload.playerId, data.payload.powerName, true);
         }
       });
     }
@@ -137,6 +141,7 @@ export function useGameEngine(gameMode, peerLogic) {
 
     if (isHost) syncStateToClient({ cards: initialDeck, isGameStarted: true, currentPlayerIndex: 0 });
   }, [gameMode, isHost, syncStateToClient, sendData]);
+  startGameRef.current = startGame;
 
   const handleCardClick = (clickedCard, fromNetwork = false) => {
     const currentState = stateRef.current;
@@ -218,6 +223,7 @@ export function useGameEngine(gameMode, peerLogic) {
       }
     }
   };
+  handleCardClickRef.current = handleCardClick;
 
   useEffect(() => {
     const totalScore = players.reduce((sum, p) => sum + p.score, 0);
@@ -356,6 +362,7 @@ export function useGameEngine(gameMode, peerLogic) {
       }, 5000);
     }
   };
+  executePowerRef.current = executePower;
 
   // AI Logic remain unchanged, but restricted to AI mode
   useEffect(() => {
@@ -366,7 +373,7 @@ export function useGameEngine(gameMode, peerLogic) {
           const availablePowers = Object.keys(p2.powers).filter(k => p2.powers[k] > 0);
           if (availablePowers.length > 0) {
             const randomPower = availablePowers[Math.floor(Math.random() * availablePowers.length)];
-            executePower(p2.id, randomPower);
+            executePowerRef.current?.(p2.id, randomPower);
             return;
           }
         }
@@ -374,7 +381,7 @@ export function useGameEngine(gameMode, peerLogic) {
         const unFlipped = cards.filter(c => !c.isFlipped && !c.isMatched);
         if (unFlipped.length > 0) {
           const randomCard = unFlipped[Math.floor(Math.random() * unFlipped.length)];
-          handleCardClick(randomCard);
+          handleCardClickRef.current?.(randomCard);
         }
       }, 1000);
       return () => clearTimeout(timer);

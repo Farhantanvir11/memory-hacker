@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import './Lobby.css'; // Just creating some basic styles
-import { useMultiplayer } from '../hooks/useMultiplayer';
 import { Copy, Check } from 'lucide-react';
 
 export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
@@ -15,6 +14,7 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     peerId,
     opponentId,
     connectionStatus,
+    errorMessage,
     hostRoom,
     joinRoom
   } = peerLogic;
@@ -84,12 +84,14 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
                  <button 
                    onClick={copyToClipboard} 
                    style={{ background: 'var(--neon-cyan)', border: 'none', color: '#000', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center', fontWeight: 'bold' }}
+                   title="Copy room ID"
                  >
-                   {copied ? 'COPIED!' : 'COPY'}
+                   {copied ? <Check size={18} /> : <Copy size={18} />}
                  </button>
                )}
             </div>
             <p className="status-msg" style={{ marginTop: '20px' }}>AWAITING OPPONENT CONNECTION...</p>
+            {connectionStatus === 'error' && <p className="status-msg error-msg" style={{ marginTop: '15px' }}>{errorMessage || 'Connection failed. Create a new room.'}</p>}
           </div>
         )}
 
@@ -109,7 +111,7 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
              </button>
              
              {connectionStatus === 'connecting' && <p className="status-msg" style={{ marginTop: '15px' }}>Attempting handshake...</p>}
-             {connectionStatus === 'error' && <p className="status-msg error-msg" style={{ marginTop: '15px' }}>Connection failed. Verify ID.</p>}
+             {connectionStatus === 'error' && <p className="status-msg error-msg" style={{ marginTop: '15px' }}>{errorMessage || 'Connection failed. Verify ID.'}</p>}
           </div>
         )}
 
