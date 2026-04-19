@@ -1,23 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : window.location.origin);
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
 export function useMultiplayer() {
   const [peerId, setPeerId] = useState('');
   const [opponentId, setOpponentId] = useState('');
   // 'idle' | 'hosting' | 'connecting' | 'connected' | 'error'
-  const [connectionStatus, setConnectionStatus] = useState('idle');
+  const [connectionStatus, setConnectionStatus] = useState(SOCKET_URL ? 'idle' : 'error');
   const [isHost, setIsHost] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState(SOCKET_URL ? '' : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL to your deployed Socket.IO server URL.');
 
   const socketRef = useRef(null);
   const roomCodeRef = useRef('');
   const onDataCallback = useRef(null);
 
   useEffect(() => {
+    if (!SOCKET_URL) {
+      return;
+    }
+
     const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
       timeout: 10000
     });
@@ -33,7 +36,7 @@ export function useMultiplayer() {
 
     socket.on('connect_error', (err) => {
       setConnectionStatus('error');
-      setErrorMessage(`Could not reach multiplayer server: ${err.message}`);
+      setErrorMessage(`Could not reach multiplayer server at ${SOCKET_URL}: ${err.message}`);
     });
 
     socket.on('room-ready', ({ roomCode, hostId, guestId }) => {
@@ -71,7 +74,10 @@ export function useMultiplayer() {
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage('Multiplayer server is not connected yet. Try again in a moment.');
+      setErrorMessage(SOCKET_URL
+        ? 'Multiplayer server is not connected yet. Try again in a moment.'
+        : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL before deploying.'
+      );
       return;
     }
 
@@ -104,7 +110,10 @@ export function useMultiplayer() {
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage('Multiplayer server is not connected yet. Try again in a moment.');
+      setErrorMessage(SOCKET_URL
+        ? 'Multiplayer server is not connected yet. Try again in a moment.'
+        : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL before deploying.'
+      );
       return;
     }
 
