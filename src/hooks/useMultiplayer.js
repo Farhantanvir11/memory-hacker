@@ -1,38 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
-const LOCAL_SOCKET_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i;
-
-function getConfigError() {
-  if (!SOCKET_URL) {
-    return 'Multiplayer server is not configured. Set VITE_SOCKET_URL in Vercel.';
-  }
-
-  if (!import.meta.env.DEV && LOCAL_SOCKET_PATTERN.test(SOCKET_URL)) {
-    return 'VITE_SOCKET_URL cannot be localhost on Vercel. Use your public backend URL.';
-  }
-
-  return '';
-}
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : undefined);
 
 export function useMultiplayer() {
-  const configError = getConfigError();
   const [peerId, setPeerId] = useState('');
   const [opponentId, setOpponentId] = useState('');
   // 'idle' | 'hosting' | 'connecting' | 'connected' | 'error'
-  const [connectionStatus, setConnectionStatus] = useState(configError ? 'error' : 'idle');
+  const [connectionStatus, setConnectionStatus] = useState('idle');
   const [isHost, setIsHost] = useState(false);
   const [isServerReady, setIsServerReady] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(configError);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const socketRef = useRef(null);
   const roomCodeRef = useRef('');
   const onDataCallback = useRef(null);
 
   useEffect(() => {
-    if (configError) return;
-
     const socket = io(SOCKET_URL, {
       reconnectionAttempts: 5,
       timeout: 10000
@@ -82,16 +66,10 @@ export function useMultiplayer() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [configError]);
+  }, []);
 
   const hostRoom = useCallback(() => {
     const socket = socketRef.current;
-
-    if (configError) {
-      setConnectionStatus('error');
-      setErrorMessage(configError);
-      return false;
-    }
 
     if (!socket?.connected) {
       setConnectionStatus('error');
@@ -118,7 +96,7 @@ export function useMultiplayer() {
     });
 
     return true;
-  }, [configError]);
+  }, []);
 
   const joinRoom = useCallback((targetId) => {
     const socket = socketRef.current;
@@ -127,12 +105,6 @@ export function useMultiplayer() {
     if (!cleanTargetId) {
       setConnectionStatus('error');
       setErrorMessage('Invalid room code.');
-      return false;
-    }
-
-    if (configError) {
-      setConnectionStatus('error');
-      setErrorMessage(configError);
       return false;
     }
 
@@ -160,7 +132,7 @@ export function useMultiplayer() {
     });
 
     return true;
-  }, [configError]);
+  }, []);
 
   const setOnData = useCallback((callback) => {
     onDataCallback.current = callback;

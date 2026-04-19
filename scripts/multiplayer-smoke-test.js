@@ -1,8 +1,8 @@
 import { io } from 'socket.io-client';
 
 const serverUrl = process.env.VITE_SOCKET_URL || 'http://127.0.0.1:3001';
-const host = io(serverUrl, { transports: ['websocket'] });
-const guest = io(serverUrl, { transports: ['websocket'] });
+const host = io(serverUrl);
+const guest = io(serverUrl);
 
 let roomCode = '';
 let hostReady = false;
