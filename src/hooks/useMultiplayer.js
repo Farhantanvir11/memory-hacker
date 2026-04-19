@@ -2,21 +2,28 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
+const IS_LOCAL_SOCKET_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(SOCKET_URL);
+const HAS_INVALID_PRODUCTION_SOCKET_URL = !import.meta.env.DEV && IS_LOCAL_SOCKET_URL;
+const CONFIG_ERROR = !SOCKET_URL
+  ? 'Multiplayer server URL is missing. Set VITE_SOCKET_URL to your deployed Socket.IO server URL.'
+  : HAS_INVALID_PRODUCTION_SOCKET_URL
+    ? 'VITE_SOCKET_URL cannot be localhost on Vercel. Deploy server.js to Render/Railway/Fly, then set VITE_SOCKET_URL to that public HTTPS backend URL.'
+    : '';
 
 export function useMultiplayer() {
   const [peerId, setPeerId] = useState('');
   const [opponentId, setOpponentId] = useState('');
   // 'idle' | 'hosting' | 'connecting' | 'connected' | 'error'
-  const [connectionStatus, setConnectionStatus] = useState(SOCKET_URL ? 'idle' : 'error');
+  const [connectionStatus, setConnectionStatus] = useState(CONFIG_ERROR ? 'error' : 'idle');
   const [isHost, setIsHost] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(SOCKET_URL ? '' : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL to your deployed Socket.IO server URL.');
+  const [errorMessage, setErrorMessage] = useState(CONFIG_ERROR);
 
   const socketRef = useRef(null);
   const roomCodeRef = useRef('');
   const onDataCallback = useRef(null);
 
   useEffect(() => {
-    if (!SOCKET_URL) {
+    if (CONFIG_ERROR) {
       return;
     }
 
@@ -36,7 +43,7 @@ export function useMultiplayer() {
 
     socket.on('connect_error', (err) => {
       setConnectionStatus('error');
-      setErrorMessage(`Could not reach multiplayer server at ${SOCKET_URL}: ${err.message}`);
+      setErrorMessage(`Could not reach multiplayer server at ${SOCKET_URL}: ${err.message}. Make sure the Socket.IO backend is running and the URL is public from this browser.`);
     });
 
     socket.on('room-ready', ({ roomCode, hostId, guestId }) => {
@@ -74,10 +81,10 @@ export function useMultiplayer() {
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage(SOCKET_URL
+      setErrorMessage(CONFIG_ERROR || (SOCKET_URL
         ? 'Multiplayer server is not connected yet. Try again in a moment.'
         : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL before deploying.'
-      );
+      ));
       return;
     }
 
@@ -110,10 +117,10 @@ export function useMultiplayer() {
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage(SOCKET_URL
+      setErrorMessage(CONFIG_ERROR || (SOCKET_URL
         ? 'Multiplayer server is not connected yet. Try again in a moment.'
         : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL before deploying.'
-      );
+      ));
       return;
     }
 
