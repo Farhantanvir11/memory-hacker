@@ -7,6 +7,8 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
 const httpServer = createServer((req, res) => {
   const pathname = new URL(req.url, 'http://localhost').pathname.replace(/\/$/, '') || '/';
 
+  console.log(`${req.method} ${pathname}`);
+
   if (pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
@@ -116,6 +118,7 @@ io.on('connection', (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`Memory Hacker multiplayer server listening on ${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`Memory Hacker multiplayer server listening on 0.0.0.0:${PORT}`);
+  console.log('Health check path: /health');
 });
