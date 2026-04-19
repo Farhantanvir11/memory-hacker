@@ -1,33 +1,55 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
-const IS_LOCAL_SOCKET_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(SOCKET_URL);
-const HAS_INVALID_PRODUCTION_SOCKET_URL = !import.meta.env.DEV && IS_LOCAL_SOCKET_URL;
-const CONFIG_ERROR = !SOCKET_URL
-  ? 'Multiplayer server URL is missing. Set VITE_SOCKET_URL to your deployed Socket.IO server URL.'
-  : HAS_INVALID_PRODUCTION_SOCKET_URL
-    ? 'VITE_SOCKET_URL cannot be localhost on Vercel. Deploy server.js to Render/Railway/Fly, then set VITE_SOCKET_URL to that public HTTPS backend URL.'
-    : '';
+const STORAGE_KEY = 'memory_hacker_socket_url';
+const ENV_SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
+const DEV_SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
+const LOCAL_SOCKET_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i;
+
+function getStoredSocketUrl() {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function getInitialSocketUrl() {
+  return ENV_SOCKET_URL || getStoredSocketUrl() || DEV_SOCKET_URL;
+}
+
+function getConfigError(socketUrl) {
+  if (!socketUrl) {
+    return 'Enter your deployed multiplayer server URL to continue.';
+  }
+
+  if (!import.meta.env.DEV && LOCAL_SOCKET_PATTERN.test(socketUrl)) {
+    return 'localhost cannot work on Vercel. Use your public HTTPS backend URL from Render, Railway, or Fly.';
+  }
+
+  return '';
+}
 
 export function useMultiplayer() {
+  const [socketUrl, setSocketUrl] = useState(getInitialSocketUrl);
+  const configError = getConfigError(socketUrl);
   const [peerId, setPeerId] = useState('');
   const [opponentId, setOpponentId] = useState('');
   // 'idle' | 'hosting' | 'connecting' | 'connected' | 'error'
-  const [connectionStatus, setConnectionStatus] = useState(CONFIG_ERROR ? 'error' : 'idle');
+  const [connectionStatus, setConnectionStatus] = useState(configError ? 'error' : 'idle');
   const [isHost, setIsHost] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(CONFIG_ERROR);
+  const [errorMessage, setErrorMessage] = useState(configError);
 
   const socketRef = useRef(null);
   const roomCodeRef = useRef('');
   const onDataCallback = useRef(null);
 
   useEffect(() => {
-    if (CONFIG_ERROR) {
+    if (getConfigError(socketUrl)) {
       return;
     }
 
-    const socket = io(SOCKET_URL, {
+    const socket = io(socketUrl, {
       reconnectionAttempts: 5,
       timeout: 10000
     });
@@ -43,7 +65,7 @@ export function useMultiplayer() {
 
     socket.on('connect_error', (err) => {
       setConnectionStatus('error');
-      setErrorMessage(`Could not reach multiplayer server at ${SOCKET_URL}: ${err.message}. Make sure the Socket.IO backend is running and the URL is public from this browser.`);
+      setErrorMessage(`Could not reach multiplayer server at ${socketUrl}: ${err.message}.`);
     });
 
     socket.on('room-ready', ({ roomCode, hostId, guestId }) => {
@@ -74,6 +96,30 @@ export function useMultiplayer() {
       socket.disconnect();
       socketRef.current = null;
     };
+  }, [socketUrl]);
+
+  const configureServerUrl = useCallback((nextUrl) => {
+    const cleanUrl = nextUrl.trim().replace(/\/$/, '');
+
+    try {
+      if (cleanUrl) {
+        window.localStorage.setItem(STORAGE_KEY, cleanUrl);
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // localStorage can be blocked; the in-memory URL still works for this session.
+    }
+
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    roomCodeRef.current = '';
+    setPeerId('');
+    setOpponentId('');
+    setIsHost(false);
+    setSocketUrl(cleanUrl);
+    setConnectionStatus(getConfigError(cleanUrl) ? 'error' : 'idle');
+    setErrorMessage(getConfigError(cleanUrl));
   }, []);
 
   const hostRoom = useCallback(() => {
@@ -81,9 +127,9 @@ export function useMultiplayer() {
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage(CONFIG_ERROR || (SOCKET_URL
+      setErrorMessage(configError || (socketUrl
         ? 'Multiplayer server is not connected yet. Try again in a moment.'
-        : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL before deploying.'
+        : 'Enter your deployed multiplayer server URL to continue.'
       ));
       return;
     }
@@ -103,7 +149,7 @@ export function useMultiplayer() {
       roomCodeRef.current = response.roomCode;
       setPeerId(response.roomCode);
     });
-  }, []);
+  }, [configError, socketUrl]);
 
   const joinRoom = useCallback((targetId) => {
     const socket = socketRef.current;
@@ -117,9 +163,9 @@ export function useMultiplayer() {
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage(CONFIG_ERROR || (SOCKET_URL
+      setErrorMessage(configError || (socketUrl
         ? 'Multiplayer server is not connected yet. Try again in a moment.'
-        : 'Multiplayer server URL is missing. Set VITE_SOCKET_URL before deploying.'
+        : 'Enter your deployed multiplayer server URL to continue.'
       ));
       return;
     }
@@ -140,7 +186,7 @@ export function useMultiplayer() {
       setPeerId(response.roomCode);
       setOpponentId(response.hostId || '');
     });
-  }, []);
+  }, [configError, socketUrl]);
 
   const setOnData = useCallback((callback) => {
     onDataCallback.current = callback;
@@ -159,6 +205,8 @@ export function useMultiplayer() {
     connectionStatus,
     isHost,
     errorMessage,
+    socketUrl,
+    configureServerUrl,
     hostRoom,
     joinRoom,
     sendData,

@@ -7,6 +7,7 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     const params = new URLSearchParams(window.location.search);
     return params.get('join') || '';
   });
+  const [serverUrlInput, setServerUrlInput] = useState('');
   const [lobbyMode, setLobbyMode] = useState('select'); // 'select', 'create', 'join'
   const [copied, setCopied] = useState(false);
 
@@ -15,9 +16,15 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     opponentId,
     connectionStatus,
     errorMessage,
+    socketUrl,
+    configureServerUrl,
     hostRoom,
     joinRoom
   } = peerLogic;
+
+  React.useEffect(() => {
+    setServerUrlInput(socketUrl || '');
+  }, [socketUrl]);
 
   // Cleanup: Remove the dangerous infinite loop React.useEffect here
 
@@ -63,6 +70,26 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     <div className="lobby-container flex-center">
       <div className="lobby-panel">
         <h2 className="glow-green">MULTIPLAYER TERMINAL</h2>
+
+        {connectionStatus === 'error' && (
+          <div className="action-box server-config-box">
+            <input
+              type="url"
+              className="hacker-input"
+              placeholder="https://your-server.onrender.com"
+              value={serverUrlInput}
+              onChange={(e) => setServerUrlInput(e.target.value)}
+            />
+            <button
+              className="lobby-btn connect-btn"
+              onClick={() => configureServerUrl(serverUrlInput)}
+              disabled={!serverUrlInput.trim()}
+            >
+              CONNECT SERVER
+            </button>
+            <p className="status-msg error-msg">{errorMessage}</p>
+          </div>
+        )}
         
         {lobbyMode === 'select' && (
           <div className="lobby-actions" style={{ flexDirection: 'column' }}>

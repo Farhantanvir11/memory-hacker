@@ -50,6 +50,10 @@
   gap: 15px;
 }
 
+.server-config-box {
+  margin: 20px 0;
+}
+
 .action-divider {
   display: flex;
   align-items: center;
