@@ -7,7 +7,6 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     const params = new URLSearchParams(window.location.search);
     return params.get('join') || '';
   });
-  const [serverUrlInput, setServerUrlInput] = useState('');
   const [lobbyMode, setLobbyMode] = useState('select'); // 'select', 'create', 'join'
   const [copied, setCopied] = useState(false);
 
@@ -16,27 +15,22 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     opponentId,
     connectionStatus,
     errorMessage,
-    socketUrl,
-    configureServerUrl,
+    isServerReady,
     hostRoom,
     joinRoom
   } = peerLogic;
 
-  React.useEffect(() => {
-    setServerUrlInput(socketUrl || '');
-  }, [socketUrl]);
-
   // Cleanup: Remove the dangerous infinite loop React.useEffect here
 
   React.useEffect(() => {
-    if (connectionStatus !== 'idle' || !peerId) return;
+    if (connectionStatus !== 'idle' || !isServerReady) return;
     const params = new URLSearchParams(window.location.search);
     const urlJoinId = params.get('join');
     if (urlJoinId) {
        setLobbyMode('join');
        joinRoom(urlJoinId);
     }
-  }, [connectionStatus, joinRoom, peerId]);
+  }, [connectionStatus, isServerReady, joinRoom]);
 
   const copyToClipboard = () => {
     if (!peerId) return;
@@ -70,41 +64,22 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
     <div className="lobby-container flex-center">
       <div className="lobby-panel">
         <h2 className="glow-green">MULTIPLAYER TERMINAL</h2>
-
-        {connectionStatus === 'error' && (
-          <div className="action-box server-config-box">
-            <input
-              type="url"
-              className="hacker-input"
-              placeholder="https://your-server.onrender.com"
-              value={serverUrlInput}
-              onChange={(e) => setServerUrlInput(e.target.value)}
-            />
-            <button
-              className="lobby-btn connect-btn"
-              onClick={() => configureServerUrl(serverUrlInput)}
-              disabled={!serverUrlInput.trim()}
-            >
-              CONNECT SERVER
-            </button>
-            <p className="status-msg error-msg">{errorMessage}</p>
-          </div>
-        )}
         
         {lobbyMode === 'select' && (
           <div className="lobby-actions" style={{ flexDirection: 'column' }}>
             <button className="lobby-btn" onClick={() => {
-              setLobbyMode('create');
-              hostRoom();
-            }}>CREATE ROOM</button>
-            <button className="lobby-btn connect-btn" onClick={() => setLobbyMode('join')}>JOIN ROOM</button>
+              if (hostRoom()) setLobbyMode('create');
+            }} disabled={!isServerReady}>CREATE ROOM</button>
+            <button className="lobby-btn connect-btn" onClick={() => setLobbyMode('join')} disabled={!isServerReady}>JOIN ROOM</button>
+            {connectionStatus === 'error' && <p className="status-msg error-msg">{errorMessage}</p>}
+            {!isServerReady && connectionStatus !== 'error' && <p className="status-msg">Connecting to multiplayer server...</p>}
           </div>
         )}
 
         {lobbyMode === 'create' && (
           <div className="action-box" style={{ width: '100%' }}>
-            <h3 className="glow-cyan">ROOM ESTABLISHED</h3>
-            <p style={{ marginBottom: '10px' }}>Your System ID:</p>
+            <h3 className="glow-cyan">{peerId ? 'ROOM ESTABLISHED' : 'CREATING ROOM'}</h3>
+            <p style={{ marginBottom: '10px' }}>Room Code:</p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(0,0,0,0.4)', padding: '10px', borderRadius: '4px', border: '1px solid var(--neon-cyan)' }}>
                <h2 className="highlight-id" style={{ margin: 0, letterSpacing: '4px' }}>{peerId || 'Generating...'}</h2>
                {peerId && (
@@ -133,12 +108,13 @@ export default function Lobby({ onStartGame, setGameMode, peerLogic }) {
                onChange={(e) => setJoinId(e.target.value.toUpperCase().replace(/\s/g, ''))}
                style={{ textTransform: 'uppercase', marginBottom: '15px' }}
              />
-             <button className="lobby-btn connect-btn" onClick={() => joinRoom(joinId.trim())} disabled={!joinId}>
+             <button className="lobby-btn connect-btn" onClick={() => joinRoom(joinId.trim())} disabled={!joinId || !isServerReady}>
                ESTABLISH LINK
              </button>
              
              {connectionStatus === 'connecting' && <p className="status-msg" style={{ marginTop: '15px' }}>Attempting handshake...</p>}
              {connectionStatus === 'error' && <p className="status-msg error-msg" style={{ marginTop: '15px' }}>{errorMessage || 'Connection failed. Verify ID.'}</p>}
+             {!isServerReady && connectionStatus !== 'error' && <p className="status-msg" style={{ marginTop: '15px' }}>Connecting to multiplayer server...</p>}
           </div>
         )}
 

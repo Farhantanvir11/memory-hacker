@@ -8,12 +8,26 @@ let roomCode = '';
 let hostReady = false;
 let guestReady = false;
 let relayed = false;
+let lastError = '';
 
-const timeout = setTimeout(() => {
-  console.error(JSON.stringify({ ok: false, roomCode, hostReady, guestReady, relayed }));
+function fail(message) {
+  clearTimeout(timeout);
+  console.error(JSON.stringify({
+    ok: false,
+    serverUrl,
+    roomCode,
+    hostReady,
+    guestReady,
+    relayed,
+    error: message || lastError || 'Timed out waiting for multiplayer server.'
+  }));
   host.close();
   guest.close();
   process.exit(1);
+}
+
+const timeout = setTimeout(() => {
+  fail(`Could not connect to ${serverUrl}. Start the backend with "npm run server" first, or set VITE_SOCKET_URL to your deployed backend.`);
 }, 5000);
 
 function finishIfReady() {
@@ -29,16 +43,25 @@ function finishIfReady() {
 host.on('connect', () => {
   host.emit('create-room', (response) => {
     if (!response?.ok) {
-      throw new Error(response?.message || 'create-room failed');
+      fail(response?.message || 'create-room failed');
+      return;
     }
 
     roomCode = response.roomCode;
     guest.emit('join-room', roomCode, (joinResponse) => {
       if (!joinResponse?.ok) {
-        throw new Error(joinResponse?.message || 'join-room failed');
+        fail(joinResponse?.message || 'join-room failed');
       }
     });
   });
+});
+
+host.on('connect_error', (err) => {
+  lastError = `Host client could not connect to ${serverUrl}: ${err.message}`;
+});
+
+guest.on('connect_error', (err) => {
+  lastError = `Guest client could not connect to ${serverUrl}: ${err.message}`;
 });
 
 host.on('room-ready', () => {

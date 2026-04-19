@@ -1,43 +1,29 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const STORAGE_KEY = 'memory_hacker_socket_url';
-const ENV_SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
-const DEV_SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
 const LOCAL_SOCKET_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i;
 
-function getStoredSocketUrl() {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
-function getInitialSocketUrl() {
-  return ENV_SOCKET_URL || getStoredSocketUrl() || DEV_SOCKET_URL;
-}
-
-function getConfigError(socketUrl) {
-  if (!socketUrl) {
-    return 'Enter your deployed multiplayer server URL to continue.';
+function getConfigError() {
+  if (!SOCKET_URL) {
+    return 'Multiplayer server is not configured. Set VITE_SOCKET_URL in Vercel.';
   }
 
-  if (!import.meta.env.DEV && LOCAL_SOCKET_PATTERN.test(socketUrl)) {
-    return 'localhost cannot work on Vercel. Use your public HTTPS backend URL from Render, Railway, or Fly.';
+  if (!import.meta.env.DEV && LOCAL_SOCKET_PATTERN.test(SOCKET_URL)) {
+    return 'VITE_SOCKET_URL cannot be localhost on Vercel. Use your public backend URL.';
   }
 
   return '';
 }
 
 export function useMultiplayer() {
-  const [socketUrl, setSocketUrl] = useState(getInitialSocketUrl);
-  const configError = getConfigError(socketUrl);
+  const configError = getConfigError();
   const [peerId, setPeerId] = useState('');
   const [opponentId, setOpponentId] = useState('');
   // 'idle' | 'hosting' | 'connecting' | 'connected' | 'error'
   const [connectionStatus, setConnectionStatus] = useState(configError ? 'error' : 'idle');
   const [isHost, setIsHost] = useState(false);
+  const [isServerReady, setIsServerReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState(configError);
 
   const socketRef = useRef(null);
@@ -45,31 +31,30 @@ export function useMultiplayer() {
   const onDataCallback = useRef(null);
 
   useEffect(() => {
-    if (getConfigError(socketUrl)) {
-      return;
-    }
+    if (configError) return;
 
-    const socket = io(socketUrl, {
+    const socket = io(SOCKET_URL, {
       reconnectionAttempts: 5,
       timeout: 10000
     });
 
     socketRef.current = socket;
 
-    socket.on('socket-ready', ({ socketId }) => {
-      if (!roomCodeRef.current) {
-        setPeerId(socketId);
-      }
+    socket.on('connect', () => {
+      setIsServerReady(true);
+      setConnectionStatus((status) => status === 'error' ? 'idle' : status);
       setErrorMessage('');
     });
 
     socket.on('connect_error', (err) => {
+      setIsServerReady(false);
       setConnectionStatus('error');
-      setErrorMessage(`Could not reach multiplayer server at ${socketUrl}: ${err.message}.`);
+      setErrorMessage(`Could not reach multiplayer server: ${err.message}`);
     });
 
     socket.on('room-ready', ({ roomCode, hostId, guestId }) => {
       roomCodeRef.current = roomCode;
+      setPeerId(roomCode);
       setConnectionStatus('connected');
       setErrorMessage('');
       setOpponentId(socket.id === hostId ? guestId : hostId);
@@ -87,6 +72,7 @@ export function useMultiplayer() {
     });
 
     socket.on('disconnect', (reason) => {
+      setIsServerReady(false);
       if (reason === 'io client disconnect') return;
       setConnectionStatus('error');
       setErrorMessage('Lost connection to the multiplayer server.');
@@ -96,44 +82,25 @@ export function useMultiplayer() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [socketUrl]);
-
-  const configureServerUrl = useCallback((nextUrl) => {
-    const cleanUrl = nextUrl.trim().replace(/\/$/, '');
-
-    try {
-      if (cleanUrl) {
-        window.localStorage.setItem(STORAGE_KEY, cleanUrl);
-      } else {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch {
-      // localStorage can be blocked; the in-memory URL still works for this session.
-    }
-
-    socketRef.current?.disconnect();
-    socketRef.current = null;
-    roomCodeRef.current = '';
-    setPeerId('');
-    setOpponentId('');
-    setIsHost(false);
-    setSocketUrl(cleanUrl);
-    setConnectionStatus(getConfigError(cleanUrl) ? 'error' : 'idle');
-    setErrorMessage(getConfigError(cleanUrl));
-  }, []);
+  }, [configError]);
 
   const hostRoom = useCallback(() => {
     const socket = socketRef.current;
 
-    if (!socket?.connected) {
+    if (configError) {
       setConnectionStatus('error');
-      setErrorMessage(configError || (socketUrl
-        ? 'Multiplayer server is not connected yet. Try again in a moment.'
-        : 'Enter your deployed multiplayer server URL to continue.'
-      ));
-      return;
+      setErrorMessage(configError);
+      return false;
     }
 
+    if (!socket?.connected) {
+      setConnectionStatus('error');
+      setErrorMessage('Multiplayer server is still connecting. Try again in a moment.');
+      return false;
+    }
+
+    roomCodeRef.current = '';
+    setPeerId('');
     setConnectionStatus('hosting');
     setIsHost(true);
     setOpponentId('');
@@ -149,7 +116,9 @@ export function useMultiplayer() {
       roomCodeRef.current = response.roomCode;
       setPeerId(response.roomCode);
     });
-  }, [configError, socketUrl]);
+
+    return true;
+  }, [configError]);
 
   const joinRoom = useCallback((targetId) => {
     const socket = socketRef.current;
@@ -157,17 +126,20 @@ export function useMultiplayer() {
 
     if (!cleanTargetId) {
       setConnectionStatus('error');
-      setErrorMessage('Invalid room ID.');
-      return;
+      setErrorMessage('Invalid room code.');
+      return false;
+    }
+
+    if (configError) {
+      setConnectionStatus('error');
+      setErrorMessage(configError);
+      return false;
     }
 
     if (!socket?.connected) {
       setConnectionStatus('error');
-      setErrorMessage(configError || (socketUrl
-        ? 'Multiplayer server is not connected yet. Try again in a moment.'
-        : 'Enter your deployed multiplayer server URL to continue.'
-      ));
-      return;
+      setErrorMessage('Multiplayer server is still connecting. Try again in a moment.');
+      return false;
     }
 
     setConnectionStatus('connecting');
@@ -186,7 +158,9 @@ export function useMultiplayer() {
       setPeerId(response.roomCode);
       setOpponentId(response.hostId || '');
     });
-  }, [configError, socketUrl]);
+
+    return true;
+  }, [configError]);
 
   const setOnData = useCallback((callback) => {
     onDataCallback.current = callback;
@@ -204,9 +178,8 @@ export function useMultiplayer() {
     opponentId,
     connectionStatus,
     isHost,
+    isServerReady,
     errorMessage,
-    socketUrl,
-    configureServerUrl,
     hostRoom,
     joinRoom,
     sendData,
